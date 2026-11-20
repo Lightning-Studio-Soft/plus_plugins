@@ -67,13 +67,12 @@ private:
 
 NetworkManager::NetworkManager() {}
 
-NetworkManager::~NetworkManager() {
-  StopListen();
-  Cleanup();
-}
+NetworkManager::~NetworkManager() { Cleanup(); }
 
 bool NetworkManager::Init() {
-  CoInitialize(NULL);
+  // S_OK and S_FALSE both take a reference that Cleanup must give back; a
+  // failure (RPC_E_CHANGED_MODE) takes none, so Cleanup must not uninitialize.
+  comInitialized = SUCCEEDED(CoInitialize(NULL));
 
   HRESULT hr = CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_ALL,
                                 IID_IUnknown, (void **)&pUnknown);
@@ -85,6 +84,10 @@ bool NetworkManager::Init() {
 }
 
 void NetworkManager::Cleanup() {
+  // The listener's connection point is a COM object too: release it while
+  // COM is still initialized, never after.
+  StopListen();
+
   if (pNetworkListManager) {
     pNetworkListManager->Release();
     pNetworkListManager = NULL;
@@ -95,7 +98,12 @@ void NetworkManager::Cleanup() {
     pUnknown = NULL;
   }
 
-  CoUninitialize();
+  // Exactly once, and only for our own CoInitialize: a second call would
+  // consume the host thread's COM reference.
+  if (comInitialized) {
+    comInitialized = false;
+    CoUninitialize();
+  }
 }
 
 std::vector<GUID> NetworkManager::GetConnectedAdapterIds() const {

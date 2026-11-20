@@ -46,6 +46,7 @@ private:
   IConnectionPoint *pConnectPoint = NULL;
   NetworkListener *pListener = NULL;
   HRESULT lastError = S_OK;
+  bool comInitialized = false;
 };
 
 #endif // NETWORK_MANAGER_H
